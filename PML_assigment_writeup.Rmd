@@ -1,0 +1,119 @@
+---
+title: "Practical Machine Learning"
+author: "Manuel Levi"
+date: "22-08-2014"
+output: html_document
+---
+
+This work focuses on the paper Qualitative Activity Recognition of Weight Lifting Exercises by Velloso, E; Bulling, A; Gellersen, H; Ugulino, W; Fuks, H.
+
+This is the write-up for the proposed task of classifying how well an exercise is being performed, using sensor values as predictors. More can be read [here](http://groupware.les.inf.puc-rio.br/public/papers/2013.Velloso.QAR-WLE.pdf).
+
+##Question
+Is it possible to predict accurately how well an exercise is being performed using simple sensor values?
+
+##Loading libraries and enabeling multi-processing
+```{r}
+library(caret)
+library(doMC)
+registerDoMC(cores = 7) 
+```
+
+##Input Data
+I started by opening the files in a CSV editor to look at the data and to learn what variables I was working with. The next step was to load this data into R.
+
+```{r}
+training_data <<- read.csv('pml-training.csv')
+test_data <<- read.csv('pml-testing.csv')
+```
+
+###Cleaning Data
+From opening the CSV files, it is obvious that there are a lot of missing values, these can bring problems during model generation. One possible solution to this kind of problem is using the `preProcess` function with the method knnImpute, to do K-nearest neighbor imputation over missing values. In this context, as there was little to no advantage in doing this, I opted to remove every column with missing values.
+
+```{r}
+training_data = training_data[colSums(is.na(training_data)) == 0]
+test_data = test_data[colSums(is.na(test_data)) == 0]
+```
+##Features
+I have not used feature extraction like PCA method on the dataset. Instead, I have used a technique called feature selection to remove the variables that would not contribute in the context of identifying how well the exercise was being performed.
+This kind of feature selection will pave the way for random forest algorithm that will, in turn, take this a step further.
+
+Both by reading the work done over the available dataset and analyzing the CSV Files I got to conclusion which features could be useful as predictors. 
+
+```{r}
+useful_features = c("roll_belt","pitch_belt","yaw_belt","total_accel_belt","gyros_belt_x","gyros_belt_y","gyros_belt_z","accel_belt_x","accel_belt_y","accel_belt_z","magnet_belt_x","magnet_belt_y","magnet_belt_z","roll_arm","pitch_arm","yaw_arm","total_accel_arm","gyros_arm_x","gyros_arm_y","gyros_arm_z","accel_arm_x","accel_arm_y","accel_arm_z","magnet_arm_x","magnet_arm_y","magnet_arm_z","roll_dumbbell","pitch_dumbbell","yaw_dumbbell","total_accel_dumbbell","gyros_dumbbell_x","gyros_dumbbell_y","gyros_dumbbell_z","accel_dumbbell_x","accel_dumbbell_y","accel_dumbbell_z","magnet_dumbbell_x","magnet_dumbbell_y","magnet_dumbbell_z","roll_forearm","pitch_forearm","yaw_forearm","gyros_forearm_x","gyros_forearm_y","gyros_forearm_z","accel_forearm_x","accel_forearm_y","accel_forearm_z","magnet_forearm_x","magnet_forearm_y","magnet_forearm_z")
+```
+
+
+##Algorithm and Parameter selection
+
+Different classification setups were tested, for this the dataset was split into 75% training instances and 25% test instances.
+
+```{r}
+inTrain = createDataPartition(y=training_data$classe, p=0.75, list=FALSE)
+ft_training_data = training_data[inTrain,c(useful_features,"classe")]
+ft_test_data = training_data[-inTrain,c(useful_features,"classe")]
+```
+
+Then different models where created with different parameters.
+```{r,eval=FALSE}
+set.seed(1)
+
+fControl = trainControl(classProbs = TRUE)
+
+modelFit_3 = train(classe ~ . , data=ft_training_data, method="rf", metric="Accuracy", tuneGrid = data.frame(mtry = 3), trControl = fControl)
+...
+modelFit_17 = train(classe ~ . , data=ft_training_data, method="rf", metric="Accuracy", tuneGrid = data.frame(mtry = 17), trControl = fControl)
+```
+Each model was then tested against the testing split.
+
+```{r, eval=FALSE}
+confusionMatrix(ft_test_data$classe, predict(modelFit_3,ft_test_data))
+...
+confusionMatrix(ft_test_data$classe, predict(modelFit_17,ft_test_data))
+```
+
+##Chosen algorithm, parameters
+
+From the tested algorithms, random forest showed the best results.
+
+Some reasons that can justify this are:
+
+* Random forest are known to perform well in datasets with characteristic noise in sensor data
+* Bagging technique is used
+* Random forest do their own feature selection at training time
+
+##Conclusion
+
+Training the algorithm with `mtry=3` and using repeated *K-fold cross-validation*, by specifying `method = "repeatedcv"`.
+
+```{r, cache=TRUE}
+training_data = training_data[,c(useful_features,"classe")]
+```
+
+```{r cachedChunc, cache=TRUE}
+set.seed(1)
+
+fControl = trainControl(method = "repeatedcv", number = 10, repeats=10,classProbs = TRUE)
+
+modelFit_3 = train(classe ~ . , 
+                 data=ft_training_data, 
+                 method="rf",
+                 metric="Accuracy",
+                 tuneGrid = data.frame(mtry = 3),
+                 trControl = fControl)
+```
+
+
+These were the accuracy and Kappa results.
+```{r, cache=TRUE}
+modelFit_3$results
+```
+
+This is the OOB estimate of error rate and confusion matrix.
+```{r, cache=TRUE}
+finalmodel = modelFit_3$finalModel
+finalmodel
+```
+
+Keep in mind that accuracy is not a reliable metric for the performance of a classifier when the dataset is unbalanced. 
