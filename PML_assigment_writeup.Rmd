@@ -84,7 +84,6 @@ Some reasons that can justify this are:
 * Random forest do their own feature selection at training time
 
 ##Conclusion
-
 Training the algorithm with `mtry=3` and using repeated *K-fold cross-validation*, by specifying `method = "repeatedcv"`.
 
 ```{r, cache=TRUE}
@@ -110,7 +109,7 @@ These were the accuracy and Kappa results.
 modelFit_3$results
 ```
 
-This is the OOB estimate of error rate and confusion matrix.
+This is the OOB (Out-of-bag) estimate of error rate and confusion matrix.
 ```{r, cache=TRUE}
 finalmodel = modelFit_3$finalModel
 finalmodel
